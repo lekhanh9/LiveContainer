@@ -9,6 +9,7 @@ on:
         description: Create a nightly release
         type: boolean
         required: false
+        default: true
 
 jobs:
   build:
@@ -22,6 +23,7 @@ jobs:
       archive_path: ${{ env.archive_path }}
       artifact: ${{ env.scheme }}.ipa
       artifact2: ${{ env.scheme }}+SideStore.ipa
+      artifact3: ${{ env.scheme }}+SideStore-iOS16.ipa
     steps:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -61,26 +63,32 @@ jobs:
         run: xcodebuild archive -archivePath "$archive_path" -scheme "$scheme" -"$filetype_parameter" "$file_to_build" -sdk iphoneos -arch arm64 -configuration Release | xcpretty && exit ${PIPESTATUS[0]}
       - name: Tar Build Artifact
         run: tar -cvf "$archive_path.xcarchive.tar" "$archive_path.xcarchive"
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload xcarchive Tar
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.archive_path }}.xcarchive.tar
           path: ${{ env.archive_path }}.xcarchive.tar
       - name: Create IPA
         run: |
-          sh .github/build_github.sh
+          bash .github/build_github.sh
 
-      - name: Upload a Build Artifact
+      - name: Upload LiveContainer.ipa
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.scheme }}.ipa
           path: ${{ env.scheme }}.ipa
       
-      - name: Upload LiveContainer+SideStore
+      - name: Upload LiveContainer+SideStore.ipa
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.scheme }}+SideStore.ipa
           path: ${{ env.scheme }}+SideStore.ipa
+
+      - name: Upload LiveContainer+SideStore-iOS16.ipa
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.scheme }}+SideStore-iOS16.ipa
+          path: ${{ env.scheme }}+SideStore-iOS16.ipa
 
   release__nightly:
     name: Nightly Release
@@ -95,15 +103,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - name: Download a Build Artifact
+        uses: actions/checkout@v6
+      - name: Download LiveContainer.ipa
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.artifact }}
-      - name: Download a Build Artifact2
+          path: .
+      - name: Download LiveContainer+SideStore.ipa
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.artifact2 }}
+          path: .
+      - name: Download LiveContainer+SideStore-iOS16.ipa
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.artifact3 }}
+          path: .
       - name: Get Commit Info
         id: commit_info
         run: |
@@ -111,34 +126,25 @@ jobs:
           COMMIT_MSG=$(git log -1 --pretty=%s)
           echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
           echo "COMMIT_MSG=$COMMIT_MSG" >> $GITHUB_ENV
-      - name: Update AltStore source
-        id: update_source
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NIGHTLY_LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
-          commit_sha: ${{ env.COMMIT_SHA }}
-          commit_msg: ${{ env.COMMIT_MSG }}
-        run: |
-          python .github/update_json.py
-      - name: Nightly Release
-        uses: andelf/nightly-release@5834076edc55cc05975561c9722043f072ac5c26
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with: 
+      - name: Publish Nightly Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: "nightly"
+          prerelease: true
+          generate_release_notes: true
           body: |
             **Commit:** [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
             **Message:** ${{ github.event.head_commit.message }}
             
-            This is a nightly release [created automatically with GitHub Actions workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}).
+            This is an automated nightly release from [GitHub Actions workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            ### Included Packages:
+            - **`LiveContainer.ipa`**: Standalone LiveContainer (TrollStore / SideStore compatible).
+            - **`LiveContainer+SideStore.ipa`**: LiveContainer with embedded SideStore for iOS 17.4+ (Remote Pairing + Anisette fix + GrandSlam fix from lekhanh9/SideStore).
+            - **`LiveContainer+SideStore-iOS16.ipa`**: LiveContainer with embedded SideStore for iOS 16 (Heartbeat minimuxer fix + Anisette fix + GrandSlam fix from lekhanh9/SideStore).
           files: |
             ${{ needs.build.outputs.artifact }}
             ${{ needs.build.outputs.artifact2 }}
-            .github/apps_nightly.json
-      - name: Update apps.json in Release 1.0
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: "1.0"
-          files: |
-            .github/apps_ss_lc.json
+            ${{ needs.build.outputs.artifact3 }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
