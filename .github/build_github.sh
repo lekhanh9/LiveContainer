@@ -107,7 +107,7 @@ bundle_sidestore() {
 bundle_sidestore "https://github.com/lekhanh9/SideStore/releases/download/nightly-fork-17.4+/SideStore.ipa" "$scheme+SideStore.ipa"
 
 # 2) LiveContainer + SideStore-iOS16 (iOS 16 Heartbeat Minimuxer fix + Windows Anisette fix + GrandSlam fix)
-bundle_sidestore "https://github.com/lekhanh9/SideStore/releases/download/nightly-fork-16/SideStore.ipa"
+bundle_sidestore "https://github.com/lekhanh9/SideStore/releases/download/nightly-fork-16/SideStore.ipa" "$scheme+SideStore16.ipa"
 
 # Cleanup
 rm -rf Payload_base tmp
